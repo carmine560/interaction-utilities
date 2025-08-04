@@ -34,7 +34,6 @@ class GuiState:
     def initialize_attributes(self):
         """Initialize the previous position and moved focus of the GUI."""
         self.previous_position = pyautogui.position()
-        self.moved_focus = 0
 
 
 def click_widget(gui_state, image, x, y, width, height):
