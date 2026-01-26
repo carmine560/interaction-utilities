@@ -61,7 +61,7 @@ def recognize_text(
                 split_text = list(
                     map(
                         lambda s: float(s.replace(",", "")),
-                        recognized_text.split(" "),
+                        recognized_text.split(),
                     )
                 )
             elif text_type == "securities_code_column":
