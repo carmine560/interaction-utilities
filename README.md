@@ -1,4 +1,4 @@
-# interaction-utilities
+# interaction-utilities Submodule
 
 <!-- Shared Python utilities for GUI control, speech synthesis, and text
 recognition -->
@@ -6,8 +6,6 @@ recognition -->
 Shared Python utilities for GUI control, speech synthesis, and text recognition
 in interactive applications, used by the following project:
   * [`trading-assistant`](https://github.com/carmine560/trading-assistant)
-
-This project is intended to be used as a Git submodule.
 
 ## License
 
