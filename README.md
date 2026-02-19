@@ -1,4 +1,4 @@
-# interaction-utilities Submodule
+# `interaction-utilities` Submodule
 
 <!-- Shared Python utilities for GUI control, speech synthesis, and text
 recognition -->
