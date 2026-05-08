@@ -8,6 +8,8 @@ import pywintypes
 import win32api
 import win32gui
 
+from core_utilities.errors import GuiInteractionError
+
 _show_window_state = {"count": 0, "max_count": 1}
 
 
@@ -63,11 +65,11 @@ def enumerate_windows(callback, extra):
     """Enumerate all open windows and apply a callback function."""
     try:
         win32gui.EnumWindows(callback, extra)
+        return True
     except pywintypes.error as e:
         if e.args[0] in (0, 5):
-            pass
-        else:
-            print(e)
+            return False
+        raise GuiInteractionError(f"Unable to enumerate windows: {e}") from e
 
 
 def hide_window(hwnd, title_regex):
