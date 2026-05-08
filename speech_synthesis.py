@@ -1,4 +1,4 @@
-"""Manage and control speech processes."""
+"""Speech process management and control utilities."""
 
 from multiprocessing import Process
 import time

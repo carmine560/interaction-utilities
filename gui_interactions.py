@@ -1,4 +1,4 @@
-"""Manage GUI state and handle interactions."""
+"""GUI state and interaction utilities."""
 
 import re
 import time

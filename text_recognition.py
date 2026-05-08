@@ -1,4 +1,4 @@
-"""Recognize and return text from screen areas."""
+"""Screen text recognition utilities."""
 
 import string
 import time
