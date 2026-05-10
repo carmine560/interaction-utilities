@@ -1,2 +1,3 @@
+# Black does not inherit configuration across Git submodule boundaries.
 [tool.black]
 line-length = 79
