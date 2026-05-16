@@ -5,6 +5,12 @@ import time
 
 import win32com.client
 
+from core_utilities.errors import ProcessStateError
+
+READY_TIMEOUT_SECONDS = 5
+JOIN_TIMEOUT_SECONDS = 5
+TERMINATE_TIMEOUT_SECONDS = 1
+
 
 class SpeechManager:
     """Manage the speech capabilities and text of a speech system."""
@@ -40,13 +46,26 @@ class SpeechManager:
         self._speech_text = text
 
 
-def start_speaking_process(speech_manager, voice_name=None, speech_rate=None):
+def start_speaking_process(
+    speech_manager,
+    voice_name=None,
+    speech_rate=None,
+    ready_timeout=READY_TIMEOUT_SECONDS,
+):
     """Start a new process for speaking."""
     speaking_process = Process(
         target=start_speaking, args=(speech_manager, voice_name, speech_rate)
     )
     speaking_process.start()
+    deadline = time.monotonic() + ready_timeout
     while not speech_manager.is_ready():
+        if time.monotonic() >= deadline:
+            speaking_process.terminate()
+            speaking_process.join(timeout=TERMINATE_TIMEOUT_SECONDS)
+            raise ProcessStateError(
+                "Speech process did not become ready within "
+                f"{ready_timeout} seconds."
+            )
         time.sleep(0.01)
     return speaking_process
 
@@ -81,11 +100,25 @@ def start_speaking(speech_manager, voice_name, speech_rate):
         time.sleep(0.01)
 
 
-def stop_speaking_process(base_manager, speech_manager, speaking_process):
+def stop_speaking_process(
+    base_manager,
+    speech_manager,
+    speaking_process,
+    join_timeout=JOIN_TIMEOUT_SECONDS,
+):
     """Stop the speaking process and shutdown the base manager."""
     if speech_manager.get_speech_text():
         time.sleep(0.01)
 
-    speech_manager.set_can_speak(False)
-    speaking_process.join()
-    base_manager.shutdown()
+    try:
+        speech_manager.set_can_speak(False)
+        speaking_process.join(timeout=join_timeout)
+        if speaking_process.is_alive():
+            speaking_process.terminate()
+            speaking_process.join(timeout=TERMINATE_TIMEOUT_SECONDS)
+            raise ProcessStateError(
+                "Speech process did not stop within "
+                f"{join_timeout} seconds."
+            )
+    finally:
+        base_manager.shutdown()
