@@ -10,6 +10,8 @@ import win32gui
 
 from core_utilities.errors import GuiInteractionError
 
+GUI_POLL_TIMEOUT_SECONDS = 15.0
+GUI_POLL_INTERVAL_SECONDS = 0.001
 _show_window_state = {"count": 0, "max_count": 1}
 
 
@@ -38,14 +40,31 @@ class GuiState:
         self.previous_position = pyautogui.position()
 
 
-def click_widget(gui_state, image, x, y, width, height):
+def click_widget(
+    gui_state,
+    image,
+    x,
+    y,
+    width,
+    height,
+    should_continue_reference=None,
+    timeout_seconds=GUI_POLL_TIMEOUT_SECONDS,
+    retry_interval_seconds=GUI_POLL_INTERVAL_SECONDS,
+):
     """Locate an image on the screen and perform a click action."""
     location = None
     x = int(x)
     y = int(y)
     width = int(width)
     height = int(height)
+    started_at = time.monotonic()
     while not location:
+        if (
+            should_continue_reference is not None
+            and not should_continue_reference()
+        ):
+            return None
+
         try:
             location = pyautogui.locateOnScreen(
                 image, region=(x, y, width, height)
@@ -53,12 +72,23 @@ def click_widget(gui_state, image, x, y, width, height):
         except pyautogui.ImageNotFoundException:
             pass
 
-        time.sleep(0.001)
+        if location:
+            break
+        if (
+            timeout_seconds is not None
+            and time.monotonic() - started_at >= timeout_seconds
+        ):
+            raise GuiInteractionError(
+                f"Widget image was not found within {timeout_seconds} "
+                f"seconds: {image}"
+            )
+        time.sleep(retry_interval_seconds)
 
     if gui_state.swapped:
         pyautogui.rightClick(pyautogui.center(location))
     else:
         pyautogui.click(pyautogui.center(location))
+    return True
 
 
 def enumerate_windows(callback, extra):
@@ -112,7 +142,12 @@ def show_window(hwnd, title_regex):
     return True
 
 
-def wait_for_window(title_regex, should_continue_reference=None):
+def wait_for_window(
+    title_regex,
+    should_continue_reference=None,
+    timeout_seconds=GUI_POLL_TIMEOUT_SECONDS,
+    retry_interval_seconds=GUI_POLL_INTERVAL_SECONDS,
+):
     """Wait for a window with a title matching a regular expression."""
 
     def check_for_window(hwnd, extra):
@@ -123,6 +158,7 @@ def wait_for_window(title_regex, should_continue_reference=None):
         return True
 
     extra = [title_regex, True]
+    started_at = time.monotonic()
     while extra[1]:
         if (
             should_continue_reference is not None
@@ -131,4 +167,16 @@ def wait_for_window(title_regex, should_continue_reference=None):
             return None
 
         enumerate_windows(check_for_window, extra)
-        time.sleep(0.001)
+        if not extra[1]:
+            return True
+        if (
+            timeout_seconds is not None
+            and time.monotonic() - started_at >= timeout_seconds
+        ):
+            raise GuiInteractionError(
+                f"Window was not found within {timeout_seconds} seconds: "
+                f"{title_regex}"
+            )
+        time.sleep(retry_interval_seconds)
+
+    return True
