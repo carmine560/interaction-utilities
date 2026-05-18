@@ -1,12 +1,11 @@
 """Screen text recognition utilities."""
 
-import string
 import time
 
+import pytesseract
 from PIL import Image
 from PIL import ImageGrab
 from PIL import ImageOps
-import pytesseract
 
 from core_utilities.errors import TextRecognitionError
 
@@ -14,17 +13,16 @@ from core_utilities.errors import TextRecognitionError
 def _get_tesseract_config(text_type):
     """Return the Tesseract configuration for a supported text type."""
     config_by_type = {
-        "integers": (
-            f"-c tessedit_char_whitelist={string.digits}"
-            f"{string.whitespace}, --psm 7"
-        ),
+        # Keep spaces inside quoted whitelist values, but not at the end. On
+        # Windows, pytesseract uses shlex.split(..., posix=False), and trailing
+        # spaces before closing quotes are not passed reliably.
+        "integers": "-c tessedit_char_whitelist='0123456789 ,' --psm 7",
         "decimal_numbers": (
-            f"-c tessedit_char_whitelist={string.digits}"
-            f"{string.whitespace},. --psm 7"
+            "-c tessedit_char_whitelist='0123456789 ,.' --psm 7"
         ),
         "securities_code_column": (
-            f"-c tessedit_char_whitelist={string.digits}"
-            "ACDFGHJKLMNPRSTUWXY --psm 6"
+            "-c tessedit_char_whitelist='0123456789"
+            "ACDFGHJKLMNPRSTUWXY' --psm 6"
         ),
     }
     return config_by_type[text_type]
