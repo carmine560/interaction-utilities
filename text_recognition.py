@@ -138,4 +138,16 @@ def recognize_text(
 
     if index is None:
         return split_text
-    return split_text[int(index)]
+    try:
+        return split_text[int(index)]
+    except (IndexError, ValueError) as e:
+        raise TextRecognitionError(
+            "OCR returned parsed text but not the requested index "
+            f"{index!r} for {text_type} in region "
+            f"({x}, {y}, {width}, {height}). Parsed values: "
+            f"{split_text!r}. Last output: {last_recognized_text!r}",
+            attempts=attempts,
+            last_output=last_recognized_text,
+            region=region,
+            text_type=text_type,
+        ) from e
