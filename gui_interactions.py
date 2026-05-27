@@ -10,7 +10,7 @@ import win32gui
 
 from core_utilities.errors import GuiInteractionError
 
-GUI_POLL_TIMEOUT_SECONDS = 15.0
+GUI_POLL_TIMEOUT_SECONDS = 30.0
 GUI_POLL_INTERVAL_SECONDS = 0.001
 _show_window_state = {"count": 0, "max_count": 1}
 
