@@ -19,7 +19,7 @@ class SpeechManager:
         """Initialize a new SpeechManager instance."""
         self._is_ready = False
         self._can_speak = True
-        self._speech_text = ""
+        self._speech_text_queue = []
 
     def is_ready(self):
         """Get whether the speech system is initialized and ready."""
@@ -39,11 +39,20 @@ class SpeechManager:
 
     def get_speech_text(self):
         """Get the speech text of the system."""
-        return self._speech_text
+        return self._speech_text_queue[0] if self._speech_text_queue else ""
 
     def set_speech_text(self, text):
         """Set the speech text of the system."""
-        self._speech_text = text
+        if text:
+            self._speech_text_queue.append(text)
+        else:
+            self._speech_text_queue.clear()
+
+    def pop_speech_text(self):
+        """Pop the next speech text from the system."""
+        if self._speech_text_queue:
+            return self._speech_text_queue.pop(0)
+        return ""
 
 
 def start_speaking_process(
@@ -92,8 +101,7 @@ def start_speaking(speech_manager, voice_name, speech_rate):
 
     speech_manager.set_ready(True)
     while speech_manager.can_speak():
-        text = speech_manager.get_speech_text()
-        speech_manager.set_speech_text("")
+        text = speech_manager.pop_speech_text()
         if text:
             speech_engine.Speak(text)
 
