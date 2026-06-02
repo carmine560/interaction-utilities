@@ -1,6 +1,6 @@
 """Speech process management and control utilities."""
 
-from multiprocessing import Process
+from multiprocessing import Pipe, Process
 import time
 
 import win32com.client
@@ -62,44 +62,92 @@ def start_speaking_process(
     ready_timeout=READY_TIMEOUT_SECONDS,
 ):
     """Start a new process for speaking."""
+    startup_error_receiver, startup_error_sender = Pipe(duplex=False)
     speaking_process = Process(
-        target=start_speaking, args=(speech_manager, voice_name, speech_rate)
+        target=start_speaking,
+        args=(speech_manager, voice_name, speech_rate, startup_error_sender),
     )
     speaking_process.start()
+    startup_error_sender.close()
     deadline = time.monotonic() + ready_timeout
     while not speech_manager.is_ready():
+        # First, check whether the child explicitly reported a startup failure.
+        try:
+            startup_error_available = startup_error_receiver.poll()
+        except (BrokenPipeError, EOFError):
+            startup_error_available = False
+        if startup_error_available:
+            startup_error = startup_error_receiver.recv()
+            speaking_process.join(timeout=TERMINATE_TIMEOUT_SECONDS)
+            startup_error_receiver.close()
+            raise ProcessStateError(
+                "Speech process failed to start: " f"{startup_error}"
+            )
+        # Next, fail fast if the child exited before it could become ready.
+        # Re-check the pipe after join in case the error arrived just before
+        # exit.
+        if getattr(speaking_process, "exitcode", None) is not None:
+            speaking_process.join(timeout=TERMINATE_TIMEOUT_SECONDS)
+            try:
+                startup_error_available = startup_error_receiver.poll()
+            except (BrokenPipeError, EOFError):
+                startup_error_available = False
+            if startup_error_available:
+                startup_error = startup_error_receiver.recv()
+                startup_error_receiver.close()
+                raise ProcessStateError(
+                    "Speech process failed to start: " f"{startup_error}"
+                )
+            startup_error_receiver.close()
+            raise ProcessStateError(
+                "Speech process exited before becoming ready "
+                f"(exit code {speaking_process.exitcode})."
+            )
+        # Otherwise, keep waiting until readiness times out.
         if time.monotonic() >= deadline:
             speaking_process.terminate()
             speaking_process.join(timeout=TERMINATE_TIMEOUT_SECONDS)
+            startup_error_receiver.close()
             raise ProcessStateError(
                 "Speech process did not become ready within "
                 f"{ready_timeout} seconds."
             )
         time.sleep(0.01)
+    startup_error_receiver.close()
     return speaking_process
 
 
-def start_speaking(speech_manager, voice_name, speech_rate):
+def start_speaking(
+    speech_manager, voice_name, speech_rate, startup_error_sender=None
+):
     """Initiate the speech process based on the speech manager's state."""
-    speech_engine = win32com.client.Dispatch("SAPI.SpVoice")
+    try:
+        speech_engine = win32com.client.Dispatch("SAPI.SpVoice")
 
-    voices_collection = speech_engine.GetVoices()
-    selected_sapi_voice_token = None
-    if voice_name:
-        for i in range(voices_collection.Count):
-            voice_token = voices_collection.Item(i)
-            if voice_name.lower() in voice_token.GetDescription().lower():
-                selected_sapi_voice_token = voice_token
-                break
-    if selected_sapi_voice_token:
-        speech_engine.Voice = selected_sapi_voice_token
-    elif voices_collection.Count > 0:
-        speech_engine.Voice = voices_collection.Item(0)
+        voices_collection = speech_engine.GetVoices()
+        selected_sapi_voice_token = None
+        if voice_name:
+            for i in range(voices_collection.Count):
+                voice_token = voices_collection.Item(i)
+                if voice_name.lower() in voice_token.GetDescription().lower():
+                    selected_sapi_voice_token = voice_token
+                    break
+        if selected_sapi_voice_token:
+            speech_engine.Voice = selected_sapi_voice_token
+        elif voices_collection.Count > 0:
+            speech_engine.Voice = voices_collection.Item(0)
 
-    if speech_rate:
-        speech_engine.Rate = max(-10, min(10, speech_rate))
+        if speech_rate:
+            speech_engine.Rate = max(-10, min(10, speech_rate))
 
-    speech_manager.set_ready(True)
+        speech_manager.set_ready(True)
+    except Exception as e:
+        if startup_error_sender is not None:
+            startup_error_sender.send(f"{type(e).__name__}: {e}")
+            startup_error_sender.close()
+        raise
+    if startup_error_sender is not None:
+        startup_error_sender.close()
     while speech_manager.can_speak():
         text = speech_manager.pop_speech_text()
         if text:
